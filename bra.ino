@@ -1,10 +1,12 @@
 #include <OneWire.h>
 
-OneWire ds(10);                //class OneWire object ds
+OneWire ds(10);               //class OneWire object ds
 
 unsigned long last_time = 0;  //last read temperature
-const int update_time= 2000;  //period update no delay
-float t = 0.0f;                    //global temperature
+const int update_time= 1000;  //period update no delay
+
+float t = 0.0f;               //global temperature
+byte data[9];                 //place for temperature
 
 void setup() {
   Serial.begin(9600);
@@ -15,36 +17,20 @@ void setup() {
     Serial.println(t,2);      //print console \n  
  }
 
-//end loop
-
-
 //Function read temperature
-int readTemp(){ 
-  byte data[2];   //place for temperature
-  ds.reset();     //reset
-  ds.write(0xCC); //no search address only one DS18b20
-  ds.write(0x44); //begin measuring
-
+void readTemp(){ 
+  ds.write(0xCC);                             //no search address 
   if (millis() - last_time >= update_time){   //1 sec
     last_time = millis();                     //remember the time for the next loop
     
-    ds.reset();     //reset
-    ds.write(0xCC); //no search address 
-    ds.write(0xBE); //give me the value temperature
-
     for ( byte i = 0; i < 9; i++){
-    data[i] = ds.read();  //read byte
-    Serial.print(data[i], HEX); Serial.print(" "); Serial.println();
+      data[i] = ds.read();  //read byte
     }
-    
-  // Convert the data to actual temperature
-  // because the result is a 16 bit signed integer, it should
-  // be stored to an "int16_t" type, which is always 16 bits
-  // even when compiled on a 32 bit processor.
-  
     int16_t raw = (data[1] << 8) | data[0];
-    //// default is 12 bit resolution, 750 ms conversion time
-    //raw = raw << 3;       // 9 bit resolution default
     t = (float)raw/16.0;    //celsius
+    
+    ds.reset();     //reset
+    ds.write(0x44); //begin measuring
+    ds.write(0xBE); //give me the value temperature
   }
 }
