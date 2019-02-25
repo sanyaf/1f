@@ -1,21 +1,21 @@
 #include <OneWire.h>
 
-OneWire ds(8);                //class OneWire object ds
+OneWire ds(10);                //class OneWire object ds
 
 unsigned long last_time = 0;  //last read temperature
 const int update_time= 1000;  //period update no delay
-int t = 0;                    //global temperature
+float t = 0.0f;                    //global temperature
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
  }
  
  void loop() {
     readTemp();               //begin function every loop
-    Serial.println(t);        //print console \n  
+    Serial.println(t,2);        //print console \n  
  }
 
-//end loop/end file
+//end loop
 
 
 //Function read temperature
@@ -34,7 +34,8 @@ int readTemp(){
     
     data[0] = ds.read();  //read low byte
     data[1] = ds.read();  //read high byte
-    t = (data[1] << 8) + data[0]; 
-    t = t >> 4;
+    int16_t raw = (data[1] << 8) + data[0]; 
+    raw = raw >> 4;
+    t= raw;
   }
 }
