@@ -12,7 +12,7 @@ void setup() {
  
  void loop() {
     readTemp();               //begin function every loop
-    Serial.println(t,2);        //print console \n  
+    Serial.println(t,2);      //print console \n  
  }
 
 //end loop
@@ -34,8 +34,14 @@ int readTemp(){
     
     data[0] = ds.read();  //read low byte
     data[1] = ds.read();  //read high byte
-    int16_t raw = (data[1] << 8) + data[0]; 
-    raw = raw >> 4;
-    t= raw;
+    
+  // Convert the data to actual temperature
+  // because the result is a 16 bit signed integer, it should
+  // be stored to an "int16_t" type, which is always 16 bits
+  // even when compiled on a 32 bit processor.
+  
+    int16_t raw = (data[1] << 8) | data[0]; 
+    raw = raw << 3;       // 9 bit resolution default
+    t = (float)raw/16;    //celsius
   }
 }
