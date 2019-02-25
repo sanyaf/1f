@@ -3,7 +3,7 @@
 OneWire ds(10);                //class OneWire object ds
 
 unsigned long last_time = 0;  //last read temperature
-const int update_time= 1000;  //period update no delay
+const int update_time= 2000;  //period update no delay
 float t = 0.0f;                    //global temperature
 
 void setup() {
@@ -31,17 +31,20 @@ int readTemp(){
     ds.reset();     //reset
     ds.write(0xCC); //no search address 
     ds.write(0xBE); //give me the value temperature
-    
-    data[0] = ds.read();  //read low byte
-    data[1] = ds.read();  //read high byte
+
+    for ( byte i = 0; i < 9; i++){
+    data[i] = ds.read();  //read byte
+    Serial.print(data[i], HEX); Serial.print(" "); Serial.println();
+    }
     
   // Convert the data to actual temperature
   // because the result is a 16 bit signed integer, it should
   // be stored to an "int16_t" type, which is always 16 bits
   // even when compiled on a 32 bit processor.
   
-    int16_t raw = (data[1] << 8) | data[0]; 
-    raw = raw << 3;       // 9 bit resolution default
+    int16_t raw = (data[1] << 8) | data[0];
+    //// default is 12 bit resolution, 750 ms conversion time
+    //raw = raw << 3;       // 9 bit resolution default
     t = (float)raw/16.0;    //celsius
   }
 }
