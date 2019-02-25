@@ -42,6 +42,6 @@ int readTemp(){
   
     int16_t raw = (data[1] << 8) | data[0]; 
     raw = raw << 3;       // 9 bit resolution default
-    t = (float)raw/16;    //celsius
+    t = (float)raw/16.0;    //celsius
   }
 }
