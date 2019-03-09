@@ -1,0 +1,135 @@
+  #include <Servo.h> 
+  #include <Wire.h> 
+  #include <LiquidCrystal_I2C.h>
+  #include <OneWire.h>
+  Servo Servo1;
+  OneWire ds(7);
+  LiquidCrystal_I2C lcd(0x27,16,2);
+  unsigned long last_time;
+  int e = 0;     // переменная для значений 0,1 сек
+  int val_power = 100;
+  // пищалка подключена к D11 D12 пинам, провода обнаружения воды к А0 и к А1 и к  +5В, А0 , A1 подтянуты к земле 1КОм
+  boolean waterscaner0 = 0;  // флаги уровня воды
+  boolean waterscaner1 = 0;
+  #define automatS 9   // пин выключателя автомат
+  boolean automat;    // flag automat
+  int   a=0;  // переменные для вычисления температуры за 10 секунд
+  float b=0;  //
+  float c=0;  //
+  float d=0;  //
+  #define button1B 2  // пин кнопки button1
+  #define button2B 3  // пин кнопки button2
+  boolean button1S;   // храним состояния кнопок (S - State)
+  boolean button1F;   // флажки кнопок (F - Flag)
+  boolean button1R;   // флажки кнопок на отпускание (R - Release)
+  boolean button1P;   // флажки кнопок на нажатие (P - Press)
+  boolean button1H;   // флажки кнопок на удержание (многократный вызов) (H - Hold)
+  boolean button1HO;  // флажки кнопок на удержание (один вызов при нажатии) (HO - Hold Once)
+  boolean button2S;   // храним состояния кнопок (S - State)
+  boolean button2F;   // флажки кнопок (F - Flag)
+  boolean button2R;   // флажки кнопок на отпускание (R - Release)
+  boolean button2P;   // флажки кнопок на нажатие (P - Press)
+  boolean button2H;   // флажки кнопок на удержание (многократный вызов) (H - Hold)
+  boolean button2HO;  // флажки кнопок на удержание (один вызов при нажатии) (HO - Hold Once)
+  #define double_timer 200   // время (мс), отведённое на второе нажатие
+  #define hold 1000           // время (мс), после которого кнопка считается зажатой
+  #define debounce 100        // (мс), антидребезг
+  unsigned long button1_timer;  // таймер последнего нажатия кнопки
+  unsigned long button1_double; // таймер двойного нажатия кнопки
+  unsigned long button2_timer;  // таймер последнего нажатия кнопки
+  unsigned long button2_double; // таймер двойного нажатия кнопки
+  
+void setup() {
+  
+  Serial.begin(9600);
+  pinMode(button1B, INPUT_PULLUP);       // кнопка "+" мощность
+  pinMode(button2B, INPUT_PULLUP);       // кнопка "-" мощность
+  pinMode(automatS, INPUT_PULLUP);       // выключатель Автоматически или в ручную
+  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(4, OUTPUT);   //   реле регулятор
+  pinMode(5, OUTPUT);   //   аварийное реле    пока не дописано
+  Servo1.attach(6);
+  lcd.begin(); 
+  lcd.backlight();
+  pinMode(A0,INPUT);//сканер воды 1й
+  pinMode(A1,INPUT);//сканер воды 2й
+}
+
+void loop() {
+  
+  // -----------------сканер воды и переключатель разлива по банкам------------
+  waterscaner0 = analogRead(A0);
+  waterscaner1 = analogRead(A1);
+  if(waterscaner0<100) { Servo1.write( 45);}
+  if(waterscaner0>100 && waterscaner1<100) { Servo1.write( 90);}
+  if(waterscaner0>100 && waterscaner1>100) { Servo1.write(135);} 
+                 
+  //----------вычисление температуры------------------------------------------
+  byte i;
+  byte present = 0; //переменные
+  byte type_s;
+  byte data[12];
+  byte addr[8];
+  float celsius;
+  if ( !ds.search(addr)) { ds.reset_search(); delay(250); return; }   // поиск датчика на шине
+  switch (addr[0]) {  case 0x28: type_s = 0; break; return; }
+  ds.reset();         // обнуляем датчик
+  ds.select(addr);    // выбираем датчик
+  ds.write(0x44, 0);  // посылаем команду датчику провести измерение температуры
+                      // и записать данные в оперативную память старт преобразования с питанием от внешнего источника.
+  delay(200);         // ждем конца преобразования.         было 1000 сделал 200
+  present = ds.reset();
+  ds.select(addr);
+  ds.write(0xBE);     // Читаем память .
+  for ( i = 0; i < 9; i++)  { data[i] = ds.read(); }
+  int16_t raw = (data[1] << 8) | data[0]; 
+  if (type_s) { raw = raw << 3; 
+  if (data[7] == 0x10) { raw = (raw & 0xFFF0) + 12 - data[6]; } }
+  else { byte cfg = (data[4] & 0x60); }
+  celsius = (float)raw / 16.0;
+  
+  //--------------------вычисляем среднюю за 10 сек температуру--------------------
+  if (millis() - last_time >= 10000) { last_time = millis();  e = 0; d = b / a; d = round(d*10); c = d /10; 
+  a = 0;  b = 0; }
+  a++; b = b + celsius; 
+  e = round(millis() - last_time)/100;
+  
+  //---------печатаем на ЖК температуру
+  lcd.setCursor(0, 1);  lcd.print("TC_bragi = ");  lcd.print(c);
+  
+  //--------отрабатываем выключатель автоматического режима------------
+  automat = !digitalRead(automatS);
+  if (  automat  ) { lcd.setCursor(15,0);  lcd.print("A");} else { lcd.setCursor(15,0);  lcd.print("M");}
+  
+  //--------понижение мощности по достижении температуры-----------
+  if ( c >= 80 && automat ) { val_power = 25; }
+  
+  //-------------работа реле-------------------------- 
+  if (e <= val_power) { digitalWrite(LED_BUILTIN, HIGH); digitalWrite(5, LOW); } // клацаем релюхой
+  else { digitalWrite(LED_BUILTIN, LOW); digitalWrite(5, HIGH); }
+  
+  //---------------отработка нажатий кнопок управления-------------
+  button1S = !digitalRead(button1B);
+  button2S = !digitalRead(button2B);
+  if (button1S && !button1F && millis() - button1_timer > debounce) { button1F = 1; button1HO = 1; button1_timer = millis(); }
+  if (!button1S && button1F && !button1R && millis() - button1_timer < hold) { button1R = 1; button1F = 0;  button1_double = millis(); }
+  if (button1R  && millis() - button1_double > double_timer) { button1R = 0; button1P = 1; }
+  if (button1F  && !button1H && millis() - button1_timer > hold) { button1H = 1; }
+  if (!button1S && button1F && millis() - button1_timer > hold) { button1F = 0;  button1H = 0; button1_timer = millis(); }
+  if (button2S && !button2F && millis() - button2_timer > debounce) { button2F = 1; button2HO = 1; button2_timer = millis(); }
+  if (!button2S && button2F && !button2R && millis() - button2_timer < hold) { button2R = 1; button2F = 0;  button2_double = millis();  }
+  if (button2R  && millis() - button2_double > double_timer) { button2R = 0; button2P = 1; }
+  if (button2F  && !button2H && millis() - button2_timer > hold) { button2H = 1; }
+  if (!button2S && button2F && millis() - button2_timer > hold) { button2F = 0;  button2H = 0; button2_timer = millis(); }
+  if (button1P)              {  button1P  = 0; val_power = val_power + 1;  }
+  if (button1H && button1HO) {  button1HO = 0; val_power = val_power + 10; }
+  if (button2P)              {  button2P  = 0; val_power = val_power - 1;  }
+  if (button2H && button2HO) {  button2HO = 0; val_power = val_power - 10; }
+  
+  //-------------вывод на ЖК параметров мощности нагрева-----------
+  lcd.setCursor(0,0);  lcd.print("POWER = ");
+  if (val_power >=100 ) {val_power = 100; lcd.setCursor(9,0);  lcd.print(val_power);}
+  if (val_power < 100 ) { lcd.setCursor(9,0); lcd.print(" "); lcd.print(val_power);}
+  if (val_power < 10 ) { lcd.setCursor(9,0); lcd.print("  "); lcd.print(val_power);}
+  if (val_power < 1 ) { val_power = 0; lcd.setCursor(9,0); lcd.print("  "); lcd.print(val_power);}
+  lcd.setCursor(12,0);  lcd.print(" %");
